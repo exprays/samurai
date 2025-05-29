@@ -1,0 +1,28 @@
+{
+  "server": {
+    "host": "localhost",
+    "port": 8080,
+    "environment": "development",
+    "read_timeout": 30,
+    "write_timeout": 30
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "mcpuser",
+    "password": "mcppassword",
+    "dbname": "mcpserver",
+    "sslmode": "disable",
+    "max_open_conns": 25,
+    "max_idle_conns": 5
+  },
+  "logger": {
+    "level": "debug",
+    "format": "console",
+    "output_path": "stdout"
+  },
+  "auth": {
+    "jwt_secret": "your-secret-key-change-in-production",
+    "token_duration": 24
+  }
+}
