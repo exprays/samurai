@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -210,6 +212,78 @@ func (mcp *MCPSuperServer) test() bool {
 	return true
 }
 
+func (mcp *MCPSuperServer) logs() {
+	mcp.printHeader("MCP Super Server Logs")
+
+	// Show Docker logs
+	mcp.printStep("PostgreSQL logs:")
+	mcp.runCommand("docker", []string{"logs", "--tail", "50", "samurai-postgres"}, ".")
+
+	// If you have application logs, show them too
+	mcp.printStep("Application logs:")
+	if fileExists("logs/app.log") {
+		mcp.runCommand("tail", []string{"-f", "logs/app.log"}, ".")
+	} else {
+		mcp.printInfo("No application log file found")
+	}
+}
+
+func (mcp *MCPSuperServer) status() {
+	mcp.printHeader("MCP Super Server Status")
+
+	// Check if server is running
+	mcp.printStep("Checking server status...")
+	if mcp.testEndpoint("http://localhost:8080/health") {
+		mcp.printSuccess("✅ Server is running and healthy")
+
+		// Test endpoints
+		endpoints := map[string]string{
+			"Health":   "http://localhost:8080/health",
+			"Ready":    "http://localhost:8080/ready",
+			"API Base": "http://localhost:8080/api/v1/",
+		}
+
+		for name, url := range endpoints {
+			if mcp.testEndpoint(url) {
+				mcp.printSuccess(fmt.Sprintf("✅ %s endpoint: %s", name, url))
+			} else {
+				mcp.printWarning(fmt.Sprintf("⚠️  %s endpoint not responding: %s", name, url))
+			}
+		}
+
+		// Check database
+		mcp.printStep("Checking database...")
+		if mcp.isDatabaseRunning() {
+			mcp.printSuccess("✅ PostgreSQL database is running")
+		} else {
+			mcp.printError("❌ PostgreSQL database is not running")
+		}
+
+	} else {
+		mcp.printError("❌ Server is not responding")
+		mcp.printInfo("💡 Run 'go run samurai.go dev' to start the server")
+	}
+}
+
+func (mcp *MCPSuperServer) testEndpoint(url string) bool {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+func (mcp *MCPSuperServer) isDatabaseRunning() bool {
+	cmd := exec.Command("docker", "ps", "--filter", "name=samurai-postgres", "--format", "{{.Names}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(string(output))) > 0
+}
+
 func (mcp *MCPSuperServer) clean() bool {
 	mcp.printHeader("Cleaning Build Artifacts")
 
@@ -239,43 +313,10 @@ func (mcp *MCPSuperServer) clean() bool {
 	return true
 }
 
-func (mcp *MCPSuperServer) status() {
-	mcp.printHeader("Service Status")
-
-	// Check Docker services
-	mcp.printStep("Checking Docker services...")
-	cmd := exec.Command("docker", "compose", "ps")
-	output, err := cmd.Output()
-	if err != nil {
-		mcp.printError("Failed to check Docker services")
-	} else {
-		fmt.Print(string(output))
-	}
-
-	// Check if server is running
-	mcp.printStep("Checking backend server...")
-	if mcp.isServerRunning() {
-		mcp.printSuccess("✅ Backend server is running on http://localhost:8080")
-	} else {
-		mcp.printWarning("⚠️  Backend server is not running")
-	}
-}
-
 func (mcp *MCPSuperServer) stop() {
 	mcp.printHeader("Stopping All Services")
 	mcp.stopAllServices()
 	mcp.printSuccess("✅ All services stopped")
-}
-
-func (mcp *MCPSuperServer) logs() {
-	mcp.printHeader("Service Logs")
-
-	if len(os.Args) > 2 {
-		service := os.Args[2]
-		mcp.runCommand("docker", []string{"compose", "logs", "-f", service}, ".")
-	} else {
-		mcp.runCommand("docker", []string{"compose", "logs", "-f"}, ".")
-	}
 }
 
 func (mcp *MCPSuperServer) checkPrerequisites() bool {
