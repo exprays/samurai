@@ -23,8 +23,14 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Type string `mapstructure:"type"`
-	Path string `mapstructure:"path"`
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	User         string `mapstructure:"user"`
+	Password     string `mapstructure:"password"`
+	DBName       string `mapstructure:"dbname"`
+	SSLMode      string `mapstructure:"sslmode"`
+	MaxOpenConns int    `mapstructure:"max_open_conns"`
+	MaxIdleConns int    `mapstructure:"max_idle_conns"`
 }
 
 type LoggerConfig struct {
@@ -41,7 +47,6 @@ type AuthConfig struct {
 func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
-	viper.AddConfigPath("../config")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
 
@@ -52,8 +57,9 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	// Try to read config file, but don't fail if it doesn't exist
-	viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
@@ -70,13 +76,15 @@ func setDefaults() {
 	viper.SetDefault("server.read_timeout", 30)
 	viper.SetDefault("server.write_timeout", 30)
 
-	viper.SetDefault("database.type", "sqlite")
-	viper.SetDefault("database.path", "../data/mcp.db")
+	viper.SetDefault("database.host", "localhost")
+	viper.SetDefault("database.port", 5432)
+	viper.SetDefault("database.sslmode", "disable")
+	viper.SetDefault("database.max_open_conns", 25)
+	viper.SetDefault("database.max_idle_conns", 5)
 
 	viper.SetDefault("logger.level", "info")
-	viper.SetDefault("logger.format", "console")
+	viper.SetDefault("logger.format", "json")
 	viper.SetDefault("logger.output_path", "stdout")
 
-	viper.SetDefault("auth.jwt_secret", "dev-secret-change-in-production")
 	viper.SetDefault("auth.token_duration", 24) // hours
 }

@@ -1,9 +1,5 @@
 # custom development environment files
 directory.txt
 *temp
-
-# Environment files
 .env.example
 .env
-
-/history

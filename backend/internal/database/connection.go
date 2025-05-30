@@ -2,13 +2,12 @@ package database
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"time"
 
 	"samurai/backend/internal/config"
 	"samurai/backend/internal/database/models"
 
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -18,17 +17,26 @@ type Database struct {
 }
 
 func NewConnection(cfg *config.DatabaseConfig) (*Database, error) {
-	// Ensure the directory exists
-	if err := os.MkdirAll(filepath.Dir(cfg.Path), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create database directory: %w", err)
-	}
+	dsn := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
+	)
 
-	db, err := gorm.Open(sqlite.Open(cfg.Path), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
+	}
+
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	return &Database{DB: db}, nil
 }
