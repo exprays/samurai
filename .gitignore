@@ -5,3 +5,5 @@ directory.txt
 # Environment files
 .env.example
 .env
+
+/history
