@@ -45,20 +45,27 @@ type AuthConfig struct {
 }
 
 func Load() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.SetConfigType("json")
-	viper.AddConfigPath("./config")
-	viper.AddConfigPath(".")
-
-	// Set defaults
+	// Set defaults first
 	setDefaults()
 
 	// Enable environment variable override
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
+	// Try to read config file (optional)
+	viper.SetConfigName("development")
+	viper.SetConfigType("json")
+	viper.AddConfigPath("../config")    // From backend/ directory
+	viper.AddConfigPath("../../config") // From backend/cmd/server/ directory
+	viper.AddConfigPath("./config")     // From root directory
+	viper.AddConfigPath(".")
+
+	// Reading config file is optional - we can work with just env vars
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		// Config file not found is OK, we'll use defaults + env vars
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
 	}
 
 	var config Config
@@ -78,6 +85,9 @@ func setDefaults() {
 
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
+	viper.SetDefault("database.user", "mcpuser")
+	viper.SetDefault("database.password", "mcppassword")
+	viper.SetDefault("database.dbname", "mcpserver")
 	viper.SetDefault("database.sslmode", "disable")
 	viper.SetDefault("database.max_open_conns", 25)
 	viper.SetDefault("database.max_idle_conns", 5)
@@ -86,5 +96,6 @@ func setDefaults() {
 	viper.SetDefault("logger.format", "json")
 	viper.SetDefault("logger.output_path", "stdout")
 
+	viper.SetDefault("auth.jwt_secret", "change-me-in-production")
 	viper.SetDefault("auth.token_duration", 24) // hours
 }

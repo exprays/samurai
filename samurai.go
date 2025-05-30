@@ -127,7 +127,7 @@ func (mcp *MCPSuperServer) setup() bool {
 
 	// Create necessary directories
 	mcp.printStep("Creating necessary directories...")
-	dirs := []string{"bin", "logs", "data"}
+	dirs := []string{"bin", "logs", "data", "data/init"}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			mcp.printError(fmt.Sprintf("Failed to create directory %s: %v", dir, err))
@@ -153,14 +153,19 @@ func (mcp *MCPSuperServer) setup() bool {
 		return false
 	}
 
-	// Pull Docker images
-	mcp.printStep("Pulling required Docker images...")
-	if !mcp.runCommand("docker", []string{"compose", "pull"}, ".") {
-		return false
+	// Pull Docker images (only if docker-compose.yml exists)
+	if fileExists("docker-compose.yml") {
+		mcp.printStep("Pulling required Docker images...")
+		if !mcp.runCommand("docker", []string{"compose", "pull"}, ".") {
+			mcp.printWarning("⚠️  Failed to pull Docker images, but continuing setup")
+		}
+	} else {
+		mcp.printWarning("⚠️  No docker-compose.yml found, skipping Docker image pull")
+		mcp.printInfo("💡 Create a docker-compose.yml file to enable database services")
 	}
 
 	mcp.printSuccess("✅ Development environment setup completed!")
-	mcp.printInfo("You can now run: go run main.go dev")
+	mcp.printInfo("You can now run: go run samurai.go dev")
 	return true
 }
 

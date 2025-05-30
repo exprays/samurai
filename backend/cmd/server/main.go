@@ -19,9 +19,13 @@ import (
 )
 
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+	// Load environment variables from multiple possible locations
+	envPaths := []string{".env", "../.env", "../../.env"}
+	for _, path := range envPaths {
+		if err := godotenv.Load(path); err == nil {
+			log.Printf("Loaded environment from %s", path)
+			break
+		}
 	}
 
 	// Load configuration
@@ -38,6 +42,8 @@ func main() {
 	defer logger.Sync()
 
 	logger.Info("Starting Samurai MCP Super Server...")
+	logger.Infof("Server config: %+v", cfg.Server)
+	logger.Infof("Database config: host=%s port=%d dbname=%s", cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
 
 	// Initialize database
 	db, err := database.NewConnection(&cfg.Database)
