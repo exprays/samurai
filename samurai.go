@@ -52,8 +52,6 @@ func main() {
 		mcp.status()
 	case "stop":
 		mcp.stop()
-	case "logs":
-		mcp.logs()
 	case "help", "--help", "-h":
 		mcp.showHelp()
 	default:
@@ -82,39 +80,36 @@ func (mcp *MCPSuperServer) startDevelopment() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start PostgreSQL
-	mcp.printStep("Starting PostgreSQL database...")
-	if !mcp.startPostgreSQL(ctx) {
-		return
-	}
-
-	// Wait for database to be ready
-	mcp.printStep("Waiting for database to be ready...")
-	if !mcp.waitForDatabase() {
-		return
-	}
-
 	// Start the backend server
-	mcp.printStep("Starting backend server...")
+	mcp.printStep("Starting backend server with SQLite database...")
 	go mcp.startBackendServer(ctx)
 
-	// Handle graceful shutdown
-	mcp.printSuccess("✅ Development environment is running!")
-	mcp.printInfo("📊 Server: http://localhost:8080")
-	mcp.printInfo("🏥 Health: http://localhost:8080/health")
-	mcp.printInfo("📚 API: http://localhost:8080/api/v1")
-	mcp.printInfo("")
-	mcp.printInfo("Press Ctrl+C to stop all services")
+	// Give server time to start
+	time.Sleep(2 * time.Second)
+
+	// Check if server started successfully
+	if mcp.isServerRunning() {
+		mcp.printSuccess("✅ Development environment is running!")
+		mcp.printInfo("📊 Server: http://localhost:8080")
+		mcp.printInfo("🏥 Health: http://localhost:8080/health")
+		mcp.printInfo("📚 API: http://localhost:8080/api/v1")
+		mcp.printInfo("💾 Database: SQLite (data/mcp.db)")
+		mcp.printInfo("")
+		mcp.printInfo("Press Ctrl+C to stop the server")
+	} else {
+		mcp.printError("❌ Failed to start backend server")
+		return
+	}
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	mcp.printInfo("\n🛑 Shutting down services...")
+	mcp.printInfo("\n🛑 Shutting down server...")
 	cancel()
-	mcp.stopAllServices()
-	mcp.printSuccess("✅ All services stopped")
+	time.Sleep(1 * time.Second)
+	mcp.printSuccess("✅ Server stopped")
 }
 
 func (mcp *MCPSuperServer) setup() bool {
@@ -138,29 +133,58 @@ func (mcp *MCPSuperServer) setup() bool {
 	// Copy environment file
 	mcp.printStep("Setting up environment configuration...")
 	if !fileExists(".env") {
-		if err := copyFile(".env.example", ".env"); err != nil {
-			mcp.printError(fmt.Sprintf("Failed to copy .env.example to .env: %v", err))
-			return false
+		if fileExists(".env.example") {
+			if err := copyFile(".env.example", ".env"); err != nil {
+				mcp.printError(fmt.Sprintf("Failed to copy .env.example to .env: %v", err))
+				return false
+			}
+			mcp.printInfo("✅ Created .env file from template")
+		} else {
+			// Create a basic .env file
+			basicEnv := `# MCP Super Server Environment Configuration
+SERVER_HOST=localhost
+SERVER_PORT=8080
+SERVER_ENVIRONMENT=development
+
+# SQLite Database Configuration
+DATABASE_TYPE=sqlite
+DATABASE_PATH=./data/mcp.db
+
+# Logger Configuration
+LOGGER_LEVEL=debug
+LOGGER_FORMAT=console
+
+# Auth Configuration
+AUTH_JWT_SECRET=your-secret-key-change-in-production
+AUTH_TOKEN_DURATION=24
+`
+			if err := os.WriteFile(".env", []byte(basicEnv), 0644); err != nil {
+				mcp.printError(fmt.Sprintf("Failed to create .env file: %v", err))
+				return false
+			}
+			mcp.printInfo("✅ Created basic .env file")
 		}
-		mcp.printInfo("✅ Created .env file from template")
 	} else {
 		mcp.printInfo("📝 .env file already exists")
 	}
 
-	// Download Go dependencies
-	mcp.printStep("Downloading Go dependencies...")
-	if !mcp.runCommand("go", []string{"mod", "download"}, "backend") {
-		return false
+	// Initialize Go module if needed
+	if !fileExists("go.mod") {
+		mcp.printStep("Initializing Go module...")
+		if !mcp.runCommand("go", []string{"mod", "init", "mcp-super-server"}, ".") {
+			return false
+		}
 	}
 
-	// Pull Docker images
-	mcp.printStep("Pulling required Docker images...")
-	if !mcp.runCommand("docker", []string{"compose", "pull"}, ".") {
-		return false
+	// Download Go dependencies
+	mcp.printStep("Downloading Go dependencies...")
+	if !mcp.runCommand("go", []string{"mod", "tidy"}, ".") {
+		// Continue even if this fails, we'll handle it in the backend
+		mcp.printWarning("⚠️ Could not download dependencies, will try during server start")
 	}
 
 	mcp.printSuccess("✅ Development environment setup completed!")
-	mcp.printInfo("You can now run: go run main.go dev")
+	mcp.printInfo("You can now run: go run samurai.go dev")
 	return true
 }
 
@@ -237,16 +261,6 @@ func (mcp *MCPSuperServer) clean() bool {
 func (mcp *MCPSuperServer) status() {
 	mcp.printHeader("Service Status")
 
-	// Check Docker services
-	mcp.printStep("Checking Docker services...")
-	cmd := exec.Command("docker", "compose", "ps")
-	output, err := cmd.Output()
-	if err != nil {
-		mcp.printError("Failed to check Docker services")
-	} else {
-		fmt.Print(string(output))
-	}
-
 	// Check if server is running
 	mcp.printStep("Checking backend server...")
 	if mcp.isServerRunning() {
@@ -254,23 +268,19 @@ func (mcp *MCPSuperServer) status() {
 	} else {
 		mcp.printWarning("⚠️  Backend server is not running")
 	}
+
+	// Check database file
+	if fileExists("data/mcp.db") {
+		mcp.printSuccess("✅ SQLite database exists at data/mcp.db")
+	} else {
+		mcp.printInfo("📝 SQLite database will be created on first run")
+	}
 }
 
 func (mcp *MCPSuperServer) stop() {
 	mcp.printHeader("Stopping All Services")
-	mcp.stopAllServices()
-	mcp.printSuccess("✅ All services stopped")
-}
-
-func (mcp *MCPSuperServer) logs() {
-	mcp.printHeader("Service Logs")
-
-	if len(os.Args) > 2 {
-		service := os.Args[2]
-		mcp.runCommand("docker", []string{"compose", "logs", "-f", service}, ".")
-	} else {
-		mcp.runCommand("docker", []string{"compose", "logs", "-f"}, ".")
-	}
+	mcp.printInfo("Use Ctrl+C to stop the running server")
+	mcp.printSuccess("✅ No background services to stop")
 }
 
 func (mcp *MCPSuperServer) checkPrerequisites() bool {
@@ -283,56 +293,26 @@ func (mcp *MCPSuperServer) checkPrerequisites() bool {
 	}
 	mcp.printInfo("✅ Go is installed")
 
-	// Check Docker
-	if !mcp.commandExists("docker") {
-		mcp.printError("❌ Docker is not installed. Please install Docker Desktop")
-		return false
-	}
-	mcp.printInfo("✅ Docker is installed")
-
-	// Check Docker Compose
-	cmd := exec.Command("docker", "compose", "version")
-	if err := cmd.Run(); err != nil {
-		mcp.printError("❌ Docker Compose is not available")
-		return false
-	}
-	mcp.printInfo("✅ Docker Compose is available")
-
 	return true
 }
 
 func (mcp *MCPSuperServer) isSetup() bool {
-	return fileExists(".env") && dirExists("backend/vendor") || mcp.commandExists("go")
-}
-
-func (mcp *MCPSuperServer) startPostgreSQL(ctx context.Context) bool {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d", "postgres")
-	if err := cmd.Run(); err != nil {
-		mcp.printError(fmt.Sprintf("Failed to start PostgreSQL: %v", err))
-		return false
-	}
-	return true
-}
-
-func (mcp *MCPSuperServer) waitForDatabase() bool {
-	mcp.printInfo("Waiting for PostgreSQL to be ready...")
-
-	for i := 0; i < 30; i++ { // Wait up to 30 seconds
-		cmd := exec.Command("docker", "compose", "exec", "-T", "postgres",
-			"pg_isready", "-U", "mcpuser", "-d", "mcpserver")
-		if err := cmd.Run(); err == nil {
-			mcp.printSuccess("✅ PostgreSQL is ready")
-			return true
-		}
-		time.Sleep(1 * time.Second)
-		fmt.Print(".")
-	}
-
-	mcp.printError("❌ PostgreSQL failed to start within 30 seconds")
-	return false
+	return fileExists(".env")
 }
 
 func (mcp *MCPSuperServer) startBackendServer(ctx context.Context) {
+	// First ensure backend directory exists
+	if !dirExists("backend") {
+		mcp.printError("❌ Backend directory not found. Please ensure you're in the correct directory.")
+		return
+	}
+
+	// Download dependencies first
+	mcp.printStep("Ensuring Go dependencies are downloaded...")
+	depsCmd := exec.Command("go", "mod", "tidy")
+	depsCmd.Dir = "backend"
+	depsCmd.Run() // Don't fail if this doesn't work
+
 	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/server")
 	cmd.Dir = "backend"
 	cmd.Stdout = os.Stdout
@@ -343,15 +323,18 @@ func (mcp *MCPSuperServer) startBackendServer(ctx context.Context) {
 	}
 }
 
-func (mcp *MCPSuperServer) stopAllServices() {
-	// Stop Docker services
-	cmd := exec.Command("docker", "compose", "down")
-	cmd.Run()
-}
-
 func (mcp *MCPSuperServer) isServerRunning() bool {
-	cmd := exec.Command("curl", "-s", "http://localhost:8080/health")
-	return cmd.Run() == nil
+	// Try to connect to the health endpoint
+	if mcp.commandExists("curl") {
+		cmd := exec.Command("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "http://localhost:8080/health")
+		output, err := cmd.Output()
+		if err == nil && string(output) == "200" {
+			return true
+		}
+	}
+
+	// Alternative check using Go's net package would be better, but this is simpler for now
+	return false
 }
 
 func (mcp *MCPSuperServer) runCommand(name string, args []string, dir string) bool {
@@ -376,42 +359,42 @@ func (mcp *MCPSuperServer) commandExists(name string) bool {
 
 func (mcp *MCPSuperServer) showHelp() {
 	fmt.Printf(`
-%sSamurai MSS - Development Tool%s
+%sMCP Super Server - Development Tool%s
 
 %sUSAGE:%s
-	go run samurai.go <command> [arguments]
+    go run samurai.go <command> [arguments]
 
 %sCOMMANDS:%s
-	%sdev%s      Start development environment (database + server)
-	%ssetup%s    Setup development environment
-	%sbuild%s    Build the application
-	%stest%s     Run all tests
-	%sclean%s    Clean build artifacts
-	%sstatus%s   Show status of all services
-	%sstop%s     Stop all running services
-	%slogs%s     Show logs from services (optional: specify service name)
-	%shelp%s     Show this help message
+    %sdev%s      Start development environment (SQLite + server)
+    %ssetup%s    Setup development environment
+    %sbuild%s    Build the application
+    %stest%s     Run all tests
+    %sclean%s    Clean build artifacts
+    %sstatus%s   Show status of all services
+    %sstop%s     Stop all running services
+    %shelp%s     Show this help message
 
 %sEXAMPLES:%s
-	go run main.go dev          # Start full development environment
-	go run main.go setup        # Setup development environment
-	go run main.go build        # Build the application
-	go run main.go test         # Run tests
-	go run main.go logs postgres # Show PostgreSQL logs
-	go run main.go status       # Check service status
+    go run samurai.go dev       # Start full development environment
+    go run samurai.go setup     # Setup development environment
+    go run samurai.go build     # Build the application
+    go run samurai.go test      # Run tests
+    go run samurai.go status    # Check service status
 
 %sSERVICES:%s
-	- PostgreSQL Database (port 5432)
-	- Backend API Server (port 8080)
+    - Backend API Server (port 8080)
+    - SQLite Database (data/mcp.db)
 
 %sENDPOINTS:%s
-	- Health Check: http://localhost:8080/health
-	- API Base: http://localhost:8080/api/v1
+    - Health Check: http://localhost:8080/health
+    - API Base: http://localhost:8080/api/v1
 
 %sPREREQUISITES:%s
-	- Go 1.21 or later
-	- Docker Desktop
-	- Git
+    - Go 1.21 or later
+
+%sNOTE:%s
+    This version uses SQLite database instead of PostgreSQL for easier setup.
+    No Docker required!
 
 `,
 		ColorCyan, ColorReset,
@@ -425,11 +408,12 @@ func (mcp *MCPSuperServer) showHelp() {
 		ColorGreen, ColorReset,
 		ColorGreen, ColorReset,
 		ColorGreen, ColorReset,
-		ColorGreen, ColorReset,
 		ColorYellow, ColorReset,
 		ColorYellow, ColorReset,
 		ColorYellow, ColorReset,
 		ColorYellow, ColorReset,
+		ColorBlue, ColorReset,
+		ColorBlue, ColorReset,
 	)
 }
 
