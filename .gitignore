@@ -1,7 +1,6 @@
 # custom development environment files
 directory.txt
 *temp
-.env.example
 .env
 
 # log files
