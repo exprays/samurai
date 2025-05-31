@@ -12,10 +12,32 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+func getLogsDir() string {
+	// Get current working directory
+	wd, err := os.Getwd()
+	if err != nil {
+		return "logs" // fallback
+	}
+
+	// Check if we're in backend/cmd/server directory
+	if filepath.Base(wd) == "server" && filepath.Base(filepath.Dir(wd)) == "cmd" {
+		// Go up 3 levels: server -> cmd -> backend -> root
+		return filepath.Join("..", "..", "..", "logs")
+	}
+
+	// Check if we're in backend directory
+	if filepath.Base(wd) == "backend" {
+		// Go up 1 level: backend -> root
+		return filepath.Join("..", "logs")
+	}
+
+	// If we're in root directory, use logs directly
+	return "logs"
+}
+
 func NewSugaredLogger(cfg *config.LoggerConfig) (*zap.SugaredLogger, error) {
 	// Create logs directory in root project directory
-	// From backend/cmd/server/, go up to root and create logs
-	logsDir := "../../logs"
+	logsDir := getLogsDir()
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create logs directory: %w", err)
 	}
@@ -67,7 +89,7 @@ func NewSugaredLogger(cfg *config.LoggerConfig) (*zap.SugaredLogger, error) {
 // Create a separate logger for HTTP access logs
 func NewAccessLogger() (*zap.SugaredLogger, error) {
 	// Create logs directory in root
-	logsDir := "../../logs"
+	logsDir := getLogsDir()
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create logs directory: %w", err)
 	}
@@ -94,7 +116,7 @@ func NewAccessLogger() (*zap.SugaredLogger, error) {
 // Create a separate logger for database logs
 func NewDatabaseLogger() (*zap.SugaredLogger, error) {
 	// Create logs directory in root
-	logsDir := "../../logs"
+	logsDir := getLogsDir()
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create logs directory: %w", err)
 	}

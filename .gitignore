@@ -4,4 +4,6 @@ directory.txt
 .env.example
 .env
 
+# log files
 /history
+/logs

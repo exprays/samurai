@@ -98,13 +98,35 @@ func (mcp *MCPSuperServer) startDevelopment() {
 
 	// Start the backend server
 	mcp.printStep("Starting backend server...")
+
+	// Start server in background
 	go mcp.startBackendServer(ctx)
 
-	// Handle graceful shutdown
+	// Wait for server to be ready (check health endpoint)
+	mcp.printInfo("Waiting for server to start...")
+	for i := 0; i < 30; i++ { // Wait up to 30 seconds
+		if mcp.testEndpoint("http://localhost:8080/health") {
+			break
+		}
+		time.Sleep(1 * time.Second)
+		fmt.Print(".")
+	}
+	fmt.Println() // New line after dots
+
+	// Check if server started successfully
+	if !mcp.testEndpoint("http://localhost:8080/health") {
+		mcp.printError("❌ Server failed to start within 30 seconds")
+		cancel()
+		mcp.stopAllServices()
+		return
+	}
+
+	// Server started successfully - show this ONLY after server is ready
 	mcp.printSuccess("✅ Development environment is running!")
 	mcp.printInfo("📊 Server: http://localhost:8080")
 	mcp.printInfo("🏥 Health: http://localhost:8080/health")
 	mcp.printInfo("📚 API: http://localhost:8080/api/v1")
+	mcp.printInfo("📝 Logs: ./logs/ directory")
 	mcp.printInfo("")
 	mcp.printInfo("Press Ctrl+C to stop all services")
 
@@ -381,8 +403,8 @@ func (mcp *MCPSuperServer) waitForDatabase() bool {
 func (mcp *MCPSuperServer) startBackendServer(ctx context.Context) {
 	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/server")
 	cmd.Dir = "backend"
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// cmd.Stdout = os.Stdout
+	// cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil && ctx.Err() == nil {
 		mcp.printError(fmt.Sprintf("Backend server failed: %v", err))
