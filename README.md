@@ -64,7 +64,7 @@ A comprehensive Model Context Protocol (MCP) super server with plugin architectu
 
 ### 1. Clone Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/exprays/samurai
 cd exprays-samurai
 ```
 
