@@ -17,12 +17,12 @@
     "max_idle_conns": 5
   },
   "logger": {
-    "level": "debug",
-    "format": "console",
-    "output_path": "stdout"
+    "level": "info",
+    "format": "json",
+    "output_path": "logs/app.log"
   },
   "auth": {
-    "jwt_secret": "your-secret-key-change-in-production",
+    "jwt_secret": "samurai-super-secret-jwt-key-change-in-production-2024",
     "token_duration": 24
   }
 }
