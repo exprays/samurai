@@ -47,7 +47,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 				Error:   "User already exists",
 				Message: "A user with this email already exists",
 			})
-		case auth.ErrPasswordTooShort:
+		case auth.ErrPasswordTooShort, auth.ErrPasswordTooLong, auth.ErrPasswordTooWeak,
+			auth.ErrPasswordNoUppercase, auth.ErrPasswordNoLowercase,
+			auth.ErrPasswordNoNumber, auth.ErrPasswordNoSpecial, auth.ErrPasswordCommon:
 			c.JSON(http.StatusBadRequest, auth.ErrorResponse{
 				Error:   "Password validation failed",
 				Message: err.Error(),
@@ -132,4 +134,48 @@ func (h *AuthHandler) Profile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, profile)
+}
+
+// CheckPasswordStrength analyzes password strength
+func (h *AuthHandler) CheckPasswordStrength(c *gin.Context) {
+	var req auth.PasswordStrengthRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, auth.ErrorResponse{
+			Error:   "Invalid request data",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	response := h.authService.CheckPasswordStrength(req.Password)
+	c.JSON(http.StatusOK, response)
+}
+
+// GeneratePassword generates a secure password
+func (h *AuthHandler) GeneratePassword(c *gin.Context) {
+	var req auth.GeneratePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, auth.ErrorResponse{
+			Error:   "Invalid request data",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Default length if not provided
+	if req.Length == 0 {
+		req.Length = 12
+	}
+
+	response, err := h.authService.GenerateSecurePassword(req.Length)
+	if err != nil {
+		h.logger.Errorf("Password generation error: %v", err)
+		c.JSON(http.StatusInternalServerError, auth.ErrorResponse{
+			Error:   "Internal server error",
+			Message: "Failed to generate password",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
 }
