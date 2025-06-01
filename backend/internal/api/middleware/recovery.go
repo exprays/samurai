@@ -44,6 +44,10 @@ func Recovery(logger *zap.SugaredLogger) gin.HandlerFunc {
 			"error", recovered,
 			"request", string(httpRequest),
 			"stack", string(debug.Stack()),
+			"method", c.Request.Method,
+			"ip", c.ClientIP(),
+			"user_agent", c.Request.UserAgent(),
+			"path", c.Request.URL.Path,
 		)
 
 		c.JSON(http.StatusInternalServerError, gin.H{
