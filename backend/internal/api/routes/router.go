@@ -37,6 +37,8 @@ func SetupRouter(db *database.Database, authManager *auth.AuthManager, logger *z
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/password/check", authHandler.CheckPasswordStrength)
+			auth.POST("/password/generate", authHandler.GeneratePassword)
 		}
 
 		// Protected routes
