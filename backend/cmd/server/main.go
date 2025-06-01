@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"samurai/backend/internal/api/routes"
+	"samurai/backend/internal/auth"
 	"samurai/backend/internal/config"
 	"samurai/backend/internal/database"
 	"samurai/backend/internal/utils"
@@ -59,8 +60,12 @@ func main() {
 
 	logger.Info("Database migrations completed")
 
+	// Initialize auth manager
+	authManager := auth.NewAuthManager(&cfg.Auth, db, logger)
+	logger.Info("Auth manager initialized")
+
 	// Setup router
-	router := routes.SetupRouter(db, logger)
+	router := routes.SetupRouter(db, authManager, logger)
 
 	// Setup HTTP server
 	srv := &http.Server{
@@ -72,9 +77,9 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		logger.Infof("Server starting on %s", srv.Addr)
+		logger.Infof("Starting server on %s:%d", cfg.Server.Host, cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatalf("Server failed to start: %v", err)
+			logger.Fatalf("Failed to start server: %v", err)
 		}
 	}()
 
@@ -90,7 +95,7 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		logger.Fatalf("Server forced to shutdown: %v", err)
+		logger.Errorf("Server forced to shutdown: %v", err)
 	}
 
 	logger.Info("Server exited")

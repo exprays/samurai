@@ -3,13 +3,14 @@ package routes
 import (
 	"samurai/backend/internal/api/handlers"
 	"samurai/backend/internal/api/middleware"
+	"samurai/backend/internal/auth"
 	"samurai/backend/internal/database"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-func SetupRouter(db *database.Database, logger *zap.SugaredLogger) *gin.Engine {
+func SetupRouter(db *database.Database, authManager *auth.AuthManager, logger *zap.SugaredLogger) *gin.Engine {
 	// Set Gin mode based on environment
 	gin.SetMode(gin.ReleaseMode) // can make this configurable
 
@@ -22,7 +23,7 @@ func SetupRouter(db *database.Database, logger *zap.SugaredLogger) *gin.Engine {
 
 	// Initialize handlers
 	healthHandler := handlers.NewHealthHandler(db, logger)
-	authHandler := handlers.NewAuthHandler(db, logger)
+	authHandler := handlers.NewAuthHandler(db, authManager, logger)
 
 	// Health check routes
 	router.GET("/health", healthHandler.Health)
@@ -40,7 +41,7 @@ func SetupRouter(db *database.Database, logger *zap.SugaredLogger) *gin.Engine {
 
 		// Protected routes
 		protected := v1.Group("/")
-		protected.Use(middleware.AuthRequired())
+		protected.Use(middleware.AuthRequired(authManager))
 		{
 			protected.GET("/profile", authHandler.Profile)
 			// Plugin routes will be added later
