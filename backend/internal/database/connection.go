@@ -2,12 +2,10 @@ package database
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"samurai/backend/internal/config"
 	"samurai/backend/internal/database/models"
-	"samurai/backend/internal/utils"
 
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -20,48 +18,16 @@ type Database struct {
 }
 
 func NewConnection(cfg *config.DatabaseConfig) (*Database, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
-
-	// Create database logger that writes to file
-	dbLogger, err := utils.NewDatabaseLogger()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create database logger: %w", err)
-	}
-
-	// Custom GORM logger that writes to file
-	gormLogger := logger.New(
-		&gormLogWriter{logger: dbLogger},
-		logger.Config{
-			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Silent, // Only log slow queries and errors
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  false,
-		},
-	)
-
-	// For development, you can change LogLevel to logger.Info to see all queries in logs
-	if os.Getenv("SERVER_ENVIRONMENT") == "development" {
-		gormLogger = logger.New(
-			&gormLogWriter{logger: dbLogger},
-			logger.Config{
-				SlowThreshold:             time.Second,
-				LogLevel:                  logger.Info, // Log all queries to file
-				IgnoreRecordNotFoundError: true,
-				Colorful:                  false,
-			},
-		)
-	}
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=%s TimeZone=UTC",
+		cfg.Host, cfg.User, cfg.Password, cfg.DBName, cfg.Port, cfg.SSLMode)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger,
+		Logger: logger.Default.LogMode(logger.Silent),
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Configure connection pool
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
@@ -71,7 +37,7 @@ func NewConnection(cfg *config.DatabaseConfig) (*Database, error) {
 	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	return &Database{db}, nil
+	return &Database{DB: db}, nil
 }
 
 // Custom writer for GORM logger
@@ -83,12 +49,15 @@ func (w *gormLogWriter) Printf(format string, args ...interface{}) {
 	w.logger.Infof(format, args...)
 }
 
-func (db *Database) AutoMigrate() error {
-	return db.DB.AutoMigrate(
+func (d *Database) AutoMigrate() error {
+	return d.DB.AutoMigrate(
 		&models.User{},
+		&models.Role{},
+		&models.Permission{},
+		&models.RolePermission{},
 		&models.Plugin{},
-		&models.Configuration{},
 		&models.AuditLog{},
+		&models.Configuration{},
 	)
 }
 

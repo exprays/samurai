@@ -64,6 +64,12 @@ func main() {
 	authManager := auth.NewAuthManager(&cfg.Auth, db, logger)
 	logger.Info("Auth manager initialized")
 
+	// Initialize RBAC system
+	if err := authManager.InitializeRBAC(); err != nil {
+		logger.Fatalf("Failed to initialize RBAC: %v", err)
+	}
+	logger.Info("RBAC system initialized")
+
 	// Setup router
 	router := routes.SetupRouter(db, authManager, logger)
 
