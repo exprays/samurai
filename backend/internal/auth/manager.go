@@ -8,23 +8,30 @@ import (
 )
 
 type AuthManager struct {
-	jwtService *JWTService
-	db         *database.Database
-	logger     *zap.SugaredLogger
+	jwtService      *JWTService
+	passwordService *PasswordService
+	db              *database.Database
+	logger          *zap.SugaredLogger
 }
 
 func NewAuthManager(cfg *config.AuthConfig, db *database.Database, logger *zap.SugaredLogger) *AuthManager {
 	jwtService := NewJWTService(cfg.JWTSecret, cfg.TokenDuration)
+	passwordService := NewPasswordService()
 
 	return &AuthManager{
-		jwtService: jwtService,
-		db:         db,
-		logger:     logger,
+		jwtService:      jwtService,
+		passwordService: passwordService,
+		db:              db,
+		logger:          logger,
 	}
 }
 
 func (a *AuthManager) GetJWTService() *JWTService {
 	return a.jwtService
+}
+
+func (a *AuthManager) GetPasswordService() *PasswordService {
+	return a.passwordService
 }
 
 func (a *AuthManager) GetDatabase() *database.Database {
