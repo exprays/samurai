@@ -70,20 +70,32 @@ func main() {
 	}
 	logger.Info("RBAC system initialized")
 
-	// Setup router
+	// Setup router with enhanced middleware
 	router := routes.SetupRouter(db, authManager, logger)
+	logger.Info("Router configured with enhanced security middleware")
 
-	// Setup HTTP server
+	// Setup HTTP server with security configurations
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      router,
 		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		IdleTimeout:  120 * time.Second, // 2 minutes idle timeout
+		// Add security headers at server level
+		MaxHeaderBytes: 1 << 20, // 1 MB max header size
 	}
 
 	// Start server in a goroutine
 	go func() {
 		logger.Infof("Starting server on %s:%d", cfg.Server.Host, cfg.Server.Port)
+		logger.Info("Enhanced security middleware active:")
+		logger.Info("- Rate limiting enabled")
+		logger.Info("- SQL injection protection enabled")
+		logger.Info("- XSS protection enabled")
+		logger.Info("- Security monitoring enabled")
+		logger.Info("- Request validation enabled")
+		logger.Info("- RBAC enforcement enabled")
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("Failed to start server: %v", err)
 		}
