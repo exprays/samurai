@@ -180,15 +180,15 @@ func (vp *VaultProvider) HealthCheck(ctx context.Context) error {
 	// Check Vault health
 	health, err := vp.client.Sys().HealthWithContext(ctx)
 	if err != nil {
-		return fmt.Errorf("Vault health check failed: %w", err)
+		return fmt.Errorf("vault health check failed: %w", err)
 	}
 
 	if !health.Initialized {
-		return fmt.Errorf("Vault is not initialized")
+		return fmt.Errorf("vault is not initialized")
 	}
 
 	if health.Sealed {
-		return fmt.Errorf("Vault is sealed")
+		return fmt.Errorf("vault is sealed")
 	}
 
 	// Test read/write permissions
@@ -196,16 +196,16 @@ func (vp *VaultProvider) HealthCheck(ctx context.Context) error {
 	testValue := "health_check_value"
 
 	if err := vp.SetSecret(ctx, testKey, testValue); err != nil {
-		return fmt.Errorf("Vault write test failed: %w", err)
+		return fmt.Errorf("vault write test failed: %w", err)
 	}
 
 	retrievedValue, err := vp.GetSecret(ctx, testKey)
 	if err != nil {
-		return fmt.Errorf("Vault read test failed: %w", err)
+		return fmt.Errorf("vault read test failed: %w", err)
 	}
 
 	if retrievedValue != testValue {
-		return fmt.Errorf("Vault read/write test value mismatch")
+		return fmt.Errorf("vault read/write test value mismatch")
 	}
 
 	// Clean up
