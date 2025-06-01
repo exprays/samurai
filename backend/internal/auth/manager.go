@@ -16,7 +16,7 @@ type AuthManager struct {
 }
 
 func NewAuthManager(cfg *config.AuthConfig, db *database.Database, logger *zap.SugaredLogger) *AuthManager {
-	jwtService := NewJWTService(cfg.JWTSecret, cfg.TokenDuration)
+	jwtService := NewJWTService(cfg.JWTSecret, int(cfg.TokenDuration))
 	passwordService := NewPasswordService()
 	rbac := NewRBAC(db, logger)
 
