@@ -34,12 +34,13 @@ func (s *AuthService) SetPasswordPolicy(policy *PasswordPolicy) {
 	s.policy = policy
 }
 
-// Register creates a new user account with enhanced password validation
+// Register creates a new user account with enhanced password validation and RBAC
 func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 	db := s.authManager.GetDatabase()
 	logger := s.authManager.GetLogger()
 	passwordService := s.authManager.GetPasswordService()
 	jwtService := s.authManager.GetJWTService()
+	rbac := s.authManager.GetRBAC()
 
 	// Check if user already exists
 	var existingUser models.User
@@ -65,6 +66,13 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
+	// Get default role ID
+	defaultRoleID, err := rbac.GetDefaultRoleID()
+	if err != nil {
+		logger.Errorf("Error getting default role: %v", err)
+		return nil, err
+	}
+
 	// Create user
 	user := models.User{
 		ID:           uuid.New(),
@@ -73,7 +81,7 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		PasswordHash: hashedPassword,
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
-		Role:         "user", // Default role
+		RoleID:       defaultRoleID,
 		IsActive:     true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -86,8 +94,15 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 
 	logger.Infof("User registered successfully: %s", user.Email)
 
+	// Load user with role for JWT token
+	userWithRole, err := rbac.GetUserWithRole(user.ID)
+	if err != nil {
+		logger.Errorf("Error loading user role: %v", err)
+		return nil, err
+	}
+
 	// Generate JWT token
-	token, err := jwtService.GenerateToken(user.ID, user.Email, user.Username, user.Role)
+	token, err := jwtService.GenerateToken(user.ID, user.Email, user.Username, userWithRole.GetRoleName())
 	if err != nil {
 		logger.Errorf("Error generating token: %v", err)
 		return nil, err
@@ -103,23 +118,24 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 			Username:  user.Username,
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
-			Role:      user.Role,
+			Role:      userWithRole.GetRoleName(),
 			IsActive:  user.IsActive,
 			CreatedAt: user.CreatedAt.Format(time.RFC3339),
 		},
 	}, nil
 }
 
-// Login authenticates a user and returns a token
+// Login authenticates a user and returns a token with role information
 func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 	db := s.authManager.GetDatabase()
 	logger := s.authManager.GetLogger()
 	passwordService := s.authManager.GetPasswordService()
 	jwtService := s.authManager.GetJWTService()
+	rbac := s.authManager.GetRBAC()
 
-	// Find user by email
+	// Find user by email with role
 	var user models.User
-	err := db.DB.Where("email = ?", req.Email).First(&user).Error
+	err := db.DB.Preload("Role").Where("email = ?", req.Email).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInvalidCredentials
@@ -151,8 +167,15 @@ func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 
 	logger.Infof("User logged in successfully: %s", user.Email)
 
+	// Load full user with role and permissions
+	userWithRole, err := rbac.GetUserWithRole(user.ID)
+	if err != nil {
+		logger.Errorf("Error loading user role: %v", err)
+		return nil, err
+	}
+
 	// Generate JWT token
-	token, err := jwtService.GenerateToken(user.ID, user.Email, user.Username, user.Role)
+	token, err := jwtService.GenerateToken(user.ID, user.Email, user.Username, userWithRole.GetRoleName())
 	if err != nil {
 		logger.Errorf("Error generating token: %v", err)
 		return nil, err
@@ -168,22 +191,21 @@ func (s *AuthService) Login(req *LoginRequest) (*AuthResponse, error) {
 			Username:  user.Username,
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
-			Role:      user.Role,
+			Role:      userWithRole.GetRoleName(),
 			IsActive:  user.IsActive,
 			CreatedAt: user.CreatedAt.Format(time.RFC3339),
 		},
 	}, nil
 }
 
-// GetUserProfile returns user profile information
+// GetUserProfile returns user profile information with role and permissions
 func (s *AuthService) GetUserProfile(userID uuid.UUID) (*UserInfo, error) {
-	db := s.authManager.GetDatabase()
+	rbac := s.authManager.GetRBAC()
 	logger := s.authManager.GetLogger()
 
-	var user models.User
-	err := db.DB.Where("id = ?", userID).First(&user).Error
+	user, err := rbac.GetUserWithRole(userID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, ErrUserNotFound) {
 			return nil, ErrUserNotFound
 		}
 		logger.Errorf("Database error finding user: %v", err)
@@ -196,7 +218,7 @@ func (s *AuthService) GetUserProfile(userID uuid.UUID) (*UserInfo, error) {
 		Username:  user.Username,
 		FirstName: user.FirstName,
 		LastName:  user.LastName,
-		Role:      user.Role,
+		Role:      user.GetRoleName(),
 		IsActive:  user.IsActive,
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 	}, nil
