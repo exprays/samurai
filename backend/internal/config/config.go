@@ -10,29 +10,32 @@ import (
 type Config struct {
 	Server    ServerConfig    `mapstructure:"server"`
 	Database  DatabaseConfig  `mapstructure:"database"`
+	Logger    LoggerConfig    `mapstructure:"logger"`
+	Auth      AuthConfig      `mapstructure:"auth"`
 	JWT       JWTConfig       `mapstructure:"jwt"`
 	Security  SecurityConfig  `mapstructure:"security"`
 	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
-	Logging   LoggingConfig   `mapstructure:"logging"`
 	Metrics   MetricsConfig   `mapstructure:"metrics"`
 	CORS      CORSConfig      `mapstructure:"cors"`
 }
 
 type ServerConfig struct {
-	Port        int    `mapstructure:"port" validate:"required,min=1,max=65535"`
-	Host        string `mapstructure:"host" validate:"required"`
-	Environment string `mapstructure:"environment" validate:"required,oneof=development staging production"`
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	Environment  string `mapstructure:"environment"`
+	ReadTimeout  int    `mapstructure:"read_timeout"`
+	WriteTimeout int    `mapstructure:"write_timeout"`
 }
 
 type DatabaseConfig struct {
-	Host         string `mapstructure:"host" validate:"required"`
-	Port         int    `mapstructure:"port" validate:"required,min=1,max=65535"`
-	User         string `mapstructure:"user" validate:"required"`
-	Password     string `mapstructure:"password" validate:"required"`
-	Name         string `mapstructure:"name" validate:"required"`
-	SSLMode      string `mapstructure:"ssl_mode" validate:"required,oneof=disable require verify-ca verify-full"`
-	MaxOpenConns int    `mapstructure:"max_open_conns" validate:"min=1"`
-	MaxIdleConns int    `mapstructure:"max_idle_conns" validate:"min=1"`
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	User         string `mapstructure:"user"`
+	Password     string `mapstructure:"password"`
+	DBName       string `mapstructure:"dbname"`
+	SSLMode      string `mapstructure:"sslmode"`
+	MaxOpenConns int    `mapstructure:"max_open_conns"`
+	MaxIdleConns int    `mapstructure:"max_idle_conns"`
 }
 
 type JWTConfig struct {
@@ -53,10 +56,15 @@ type RateLimitConfig struct {
 	Burst    int           `mapstructure:"burst" validate:"min=1"`
 }
 
-type LoggingConfig struct {
-	Level    string `mapstructure:"level" validate:"required,oneof=debug info warn error"`
-	Format   string `mapstructure:"format" validate:"required,oneof=json console"`
-	FilePath string `mapstructure:"file_path"`
+type LoggerConfig struct {
+	Level      string `mapstructure:"level"`
+	Format     string `mapstructure:"format"`
+	OutputPath string `mapstructure:"output_path"`
+}
+
+type AuthConfig struct {
+	JWTSecret     string `mapstructure:"jwt_secret"`
+	TokenDuration int    `mapstructure:"token_duration"`
 }
 
 type MetricsConfig struct {
@@ -92,10 +100,6 @@ func Load() (*Config, error) {
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	if err := validateConfig(&config); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
 	return &config, nil

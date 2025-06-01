@@ -53,7 +53,7 @@ func (c *Config) GetDSN() string {
 		c.Database.Port,
 		c.Database.User,
 		c.Database.Password,
-		c.Database.Name,
+		c.Database.DBName,
 		c.Database.SSLMode,
 	)
 }

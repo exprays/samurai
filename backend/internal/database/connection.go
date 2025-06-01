@@ -21,7 +21,7 @@ type Database struct {
 
 func NewConnection(cfg *config.DatabaseConfig) (*Database, error) {
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode)
 
 	// Create database logger that writes to file
 	dbLogger, err := utils.NewDatabaseLogger()
