@@ -5,57 +5,221 @@
     "environment": "development",
     "read_timeout": 30,
     "write_timeout": 30,
+    "trusted_proxies": ["127.0.0.1", "::1"],
+    "allowed_hosts": ["localhost", "127.0.0.1"],
+    "enable_tls": false,
+    "tls_cert_file": "",
+    "tls_key_file": "",
+    "graceful_timeout": 30,
+    "health_check_path": "/health",
+    "metrics_path": "/metrics",
     "enable_metrics": true,
     "enable_profiling": true,
-    "cors_origins": ["http://localhost:3000", "http://localhost:8080"]
+    "cors_origins": ["http://localhost:3000", "http://localhost:8080"],
+    "headers": {
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff"
+    }
   },
   "database": {
     "host": "localhost",
     "port": 5432,
-    "user": "postgres",
-    "password": "postgres",
-    "dbname": "samurai_dev",
+    "user": "mcpuser",
+    "password": "mcppassword",
+    "dbname": "mcpserver",
     "sslmode": "disable",
     "max_open_conns": 25,
     "max_idle_conns": 5,
-    "enable_logging": true
+    "conn_max_lifetime": "1h",
+    "conn_max_idle_time": "30m",
+    "enable_logging": true,
+    "slow_query_time": "1s",
+    "retry_attempts": 3,
+    "retry_delay": "5s",
+    "encryption_key": "dev-db-encryption-key-32-chars",
+    "backup_schedule": "0 2 * * *",
+    "enable_migrations": true
   },
   "logger": {
     "level": "debug",
     "format": "console",
+    "output_path": "logs/app.log",
+    "error_output_path": "logs/error.log",
+    "max_size": 100,
+    "max_backups": 5,
+    "max_age": 30,
+    "compress": true,
     "enable_console": true,
-    "enable_file": true
+    "enable_file": true,
+    "enable_syslog": false,
+    "syslog_network": "",
+    "syslog_address": "",
+    "syslog_tag": "mcp-server",
+    "enable_sampling": false,
+    "sampling_initial": 100,
+    "sampling_interval": 100,
+    "fields": {
+      "service": "mcp-super-server",
+      "version": "1.0.0"
+    }
   },
   "auth": {
-    "jwt_secret": "dev-jwt-secret-key-change-in-production",
+    "jwt_secret": "your-secret-key-change-in-production-32-chars-min",
     "token_duration": "24h",
-    "password_salt_cost": 10
+    "refresh_token_duration": "168h",
+    "jwt_issuer": "mcp-super-server",
+    "jwt_audience": "mcp-clients",
+    "password_salt_cost": 10,
+    "enable_two_factor": false,
+    "enable_oauth": false,
+    "oauth_providers": [],
+    "session_timeout": "24h",
+    "max_login_attempts": 5,
+    "lockout_duration": "15m",
+    "password_policy": {
+      "min_length": 8,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_special_chars": false,
+      "forbid_common": false,
+      "min_score": 0
+    }
   },
   "security": {
-    "encryption_key": "dev-encryption-key-32-characters",
-    "enable_rate_limiting": false,
-    "enable_csrf_protection": false
+    "encryption_key": "dev-encryption-key-must-be-32-chars",
+    "enable_rate_limiting": true,
+    "rate_limit_requests": 100,
+    "rate_limit_window": "1m",
+    "enable_ip_whitelist": false,
+    "whitelisted_ips": [],
+    "enable_ip_blacklist": false,
+    "blacklisted_ips": [],
+    "enable_csrf_protection": false,
+    "csrf_token_length": 32,
+    "enable_sql_injection_check": true,
+    "enable_xss_protection": true,
+    "enable_security_headers": true,
+    "enable_audit_logging": true,
+    "max_upload_size": 10485760,
+    "allowed_file_types": ["jpg", "jpeg", "png", "gif", "pdf", "txt", "json"],
+    "enable_maintenance": false,
+    "maintenance_message": "System is under maintenance. Please try again later."
   },
   "secrets": {
     "provider": "local",
-    "enable_encryption": true,
+    "encryption_key": "dev-secrets-encryption-key-32-chars",
+    "vault": {
+      "address": "",
+      "token": "",
+      "path": "",
+      "namespace": "",
+      "enable_tls": false,
+      "ca_cert": "",
+      "client_cert": "",
+      "client_key": ""
+    },
+    "aws": {
+      "region": "",
+      "access_key": "",
+      "secret_key": "",
+      "profile": ""
+    },
     "local": {
-      "secret_file": "config/secrets.json"
-    }
+      "secret_file": "config/secrets.json",
+      "encrypted_file": "config/secrets.enc"
+    },
+    "refresh_interval": "1h",
+    "cache_timeout": "5m",
+    "enable_encryption": false
   },
   "external": {
     "llm_providers": {
       "openai": {
         "provider": "openai",
-        "enabled": false,
+        "api_key": "",
+        "api_url": "https://api.openai.com/v1",
         "model": "gpt-4",
-        "max_tokens": 4096,
-        "temperature": 0.7
+        "max_tokens": 4000,
+        "temperature": 0.7,
+        "timeout": "30s",
+        "rate_limit": 50,
+        "enabled": false,
+        "headers": {}
+      },
+      "anthropic": {
+        "provider": "anthropic",
+        "api_key": "",
+        "api_url": "https://api.anthropic.com/v1",
+        "model": "claude-3-sonnet-20240229",
+        "max_tokens": 4000,
+        "temperature": 0.7,
+        "timeout": "30s",
+        "rate_limit": 50,
+        "enabled": false,
+        "headers": {}
+      },
+      "local": {
+        "provider": "ollama",
+        "api_key": "",
+        "api_url": "http://localhost:11434/v1",
+        "model": "llama2",
+        "max_tokens": 2000,
+        "temperature": 0.7,
+        "timeout": "60s",
+        "rate_limit": 10,
+        "enabled": false,
+        "headers": {}
       }
     },
+    "sms_providers": {
+      "twilio": {
+        "provider": "twilio",
+        "account_sid": "",
+        "auth_token": "",
+        "from_number": "",
+        "webhook_url": "",
+        "enabled": false
+      }
+    },
+    "email_provider": {
+      "provider": "smtp",
+      "smtp_host": "localhost",
+      "smtp_port": 587,
+      "username": "",
+      "password": "",
+      "from_email": "noreply@localhost",
+      "from_name": "MCP Super Server",
+      "enable_tls": true,
+      "enabled": false
+    },
+    "storage_provider": {
+      "provider": "local",
+      "bucket": "mcp-storage",
+      "region": "",
+      "access_key": "",
+      "secret_key": "",
+      "endpoint": "",
+      "enable_ssl": true,
+      "enabled": true
+    },
     "cache_provider": {
-      "provider": "redis",
+      "provider": "memory",
       "address": "localhost:6379",
+      "password": "",
+      "database": 0,
+      "max_retries": 3,
+      "pool_size": 10,
+      "idle_timeout": "5m",
+      "enabled": false
+    },
+    "queue_provider": {
+      "provider": "memory",
+      "url": "amqp://localhost:5672",
+      "username": "guest",
+      "password": "guest",
+      "vhost": "/",
+      "exchange": "mcp-exchange",
       "enabled": false
     }
   }

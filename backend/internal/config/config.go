@@ -294,11 +294,16 @@ func (cm *ConfigManager) Load() (*Config, error) {
 // loadConfiguration loads configuration from multiple sources
 func (cm *ConfigManager) loadConfiguration() (*Config, error) {
 	// Initialize viper
-	viper.SetConfigName("config")
+	viper.SetConfigName("development") // Start with development config
 	viper.SetConfigType("json")
-	viper.AddConfigPath("./config")
-	viper.AddConfigPath("../config")
-	viper.AddConfigPath("../../config")
+
+	// Add multiple config paths to find the config directory
+	viper.AddConfigPath("./config")        // Current directory
+	viper.AddConfigPath("../config")       // One level up
+	viper.AddConfigPath("../../config")    // Two levels up
+	viper.AddConfigPath("../../../config") // Three levels up (for cmd/server)
+	viper.AddConfigPath("/config")         // Absolute path
+	viper.AddConfigPath(".")
 
 	// Environment-specific configuration
 	env := GetEnvironment()
@@ -312,6 +317,16 @@ func (cm *ConfigManager) loadConfiguration() (*Config, error) {
 	// Enable environment variables
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// Manually bind specific environment variables
+	viper.BindEnv("auth.jwt_secret", "AUTH_JWT_SECRET")
+	viper.BindEnv("database.host", "DATABASE_HOST")
+	viper.BindEnv("database.port", "DATABASE_PORT")
+	viper.BindEnv("database.user", "DATABASE_USER")
+	viper.BindEnv("database.password", "DATABASE_PASSWORD")
+	viper.BindEnv("database.dbname", "DATABASE_DBNAME")
+	viper.BindEnv("server.host", "SERVER_HOST")
+	viper.BindEnv("server.port", "SERVER_PORT")
 
 	// Read configuration file
 	if err := viper.ReadInConfig(); err != nil {

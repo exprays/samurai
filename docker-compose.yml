@@ -2,12 +2,12 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: samurai-postgres
+    image: postgres:15
+    container_name: postgres
     environment:
-      POSTGRES_DB: mcpserver
       POSTGRES_USER: mcpuser
       POSTGRES_PASSWORD: mcppassword
+      POSTGRES_DB: mcpserver
     ports:
       - "5432:5432"
     volumes:
@@ -15,8 +15,8 @@ services:
       - ./data/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mcpuser -d mcpserver"]
-      interval: 5s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 5
 
 volumes:

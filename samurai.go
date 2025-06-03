@@ -99,15 +99,52 @@ func (mcp *MCPSuperServer) startDevelopment() {
 	// Start the backend server
 	mcp.printStep("Starting backend server...")
 
-	// Start server in background
-	go mcp.startBackendServer(ctx)
+	// Start server in background with proper error handling
+	serverDone := make(chan error, 1)
+	go func() {
+		cmd := exec.CommandContext(ctx, "go", "run", "./cmd/server")
+		cmd.Dir = "backend"
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		err := cmd.Run()
+		if err != nil && ctx.Err() == nil {
+			serverDone <- fmt.Errorf("backend server failed: %v", err)
+		} else {
+			serverDone <- nil
+		}
+	}()
 
 	// Wait for server to be ready (check health endpoint)
 	mcp.printInfo("Waiting for server to start...")
+
+	// Check if server failed immediately
+	select {
+	case err := <-serverDone:
+		if err != nil {
+			mcp.printError(err.Error())
+			return
+		}
+	case <-time.After(2 * time.Second):
+		// Server didn't fail immediately, continue with health checks
+	}
+
 	for i := 0; i < 30; i++ { // Wait up to 30 seconds
 		if mcp.testEndpoint("http://localhost:8080/health") {
 			break
 		}
+
+		// Check if server failed during startup
+		select {
+		case err := <-serverDone:
+			if err != nil {
+				mcp.printError(err.Error())
+				return
+			}
+		default:
+			// Continue waiting
+		}
+
 		time.Sleep(1 * time.Second)
 		fmt.Print(".")
 	}
@@ -239,7 +276,7 @@ func (mcp *MCPSuperServer) logs() {
 
 	// Show Docker logs
 	mcp.printStep("PostgreSQL logs:")
-	mcp.runCommand("docker", []string{"logs", "--tail", "50", "samurai-postgres"}, ".")
+	mcp.runCommand("docker", []string{"logs", "--tail", "50", "postgres"}, ".")
 
 	// If you have application logs, show them too
 	mcp.printStep("Application logs:")
@@ -298,7 +335,7 @@ func (mcp *MCPSuperServer) testEndpoint(url string) bool {
 }
 
 func (mcp *MCPSuperServer) isDatabaseRunning() bool {
-	cmd := exec.Command("docker", "ps", "--filter", "name=samurai-postgres", "--format", "{{.Names}}")
+	cmd := exec.Command("docker", "ps", "--filter", "name=postgres", "--format", "{{.Names}}")
 	output, err := cmd.Output()
 	if err != nil {
 		return false
@@ -386,7 +423,7 @@ func (mcp *MCPSuperServer) waitForDatabase() bool {
 	mcp.printInfo("Waiting for PostgreSQL to be ready...")
 
 	for i := 0; i < 30; i++ { // Wait up to 30 seconds
-		cmd := exec.Command("docker", "compose", "exec", "-T", "postgres",
+		cmd := exec.Command("docker", "exec", "postgres",
 			"pg_isready", "-U", "mcpuser", "-d", "mcpserver")
 		if err := cmd.Run(); err == nil {
 			mcp.printSuccess("✅ PostgreSQL is ready")
@@ -485,6 +522,7 @@ func (mcp *MCPSuperServer) showHelp() {
 		ColorCyan, ColorReset,
 		ColorYellow, ColorReset,
 		ColorYellow, ColorReset,
+		ColorGreen, ColorReset,
 		ColorGreen, ColorReset,
 		ColorGreen, ColorReset,
 		ColorGreen, ColorReset,

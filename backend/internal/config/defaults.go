@@ -25,9 +25,9 @@ func (cm *ConfigManager) setDefaults() {
 	// Database defaults
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
-	viper.SetDefault("database.user", "postgres")
-	viper.SetDefault("database.password", "")
-	viper.SetDefault("database.dbname", "samurai")
+	viper.SetDefault("database.user", "mcpuser")
+	viper.SetDefault("database.password", "mcppassword")
+	viper.SetDefault("database.dbname", "mcpserver")
 	viper.SetDefault("database.sslmode", "disable")
 	viper.SetDefault("database.max_open_conns", 25)
 	viper.SetDefault("database.max_idle_conns", 10)
@@ -53,7 +53,8 @@ func (cm *ConfigManager) setDefaults() {
 	viper.SetDefault("logger.enable_syslog", false)
 
 	// Auth defaults
-	viper.SetDefault("auth.token_duration", "24h")
+	viper.SetDefault("auth.jwt_secret", "default-jwt-secret-change-in-production")
+	viper.SetDefault("auth.token_duration", "1h")
 	viper.SetDefault("auth.refresh_token_duration", "720h")
 	viper.SetDefault("auth.jwt_issuer", "samurai-server")
 	viper.SetDefault("auth.jwt_audience", "samurai-users")

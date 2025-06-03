@@ -126,7 +126,7 @@ db.AutoMigrate(&models.User{}, &models.Plugin{}, ...)
 ### Database Access
 ```bash
 # Connect to development database
-docker exec -it samurai-postgres psql -U samurai -d samurai_db
+docker exec -it postgres psql -U samurai -d samurai_db
 ```
 
 ## Logging
