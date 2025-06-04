@@ -6,3 +6,6 @@ directory.txt
 # log files
 /history
 /logs
+
+# testing
+/test
