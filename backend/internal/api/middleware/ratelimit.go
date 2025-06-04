@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -159,7 +160,17 @@ func UserRateLimit() gin.HandlerFunc {
 		// Use user ID if authenticated, otherwise IP
 		key := c.ClientIP()
 		if userID, exists := c.Get("user_id"); exists {
-			key = userID.(string)
+			// Handle both uuid.UUID and string types safely
+			switch v := userID.(type) {
+			case uuid.UUID:
+				key = v.String()
+			case string:
+				key = v
+			default:
+				// Fallback to IP if unexpected type
+				globalRateLimiterStore.logger.Warnf("Unexpected user_id type: %T", userID)
+				key = c.ClientIP()
+			}
 		}
 
 		// Higher limits for authenticated users
