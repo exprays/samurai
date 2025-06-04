@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -24,7 +25,6 @@ type RecoveryLogger struct {
 // NewRecoveryLogger creates a new recovery logger
 func NewRecoveryLogger(logger *zap.SugaredLogger, logFilePath string) (*RecoveryLogger, error) {
 	// Get the absolute path relative to project root
-	// When running from backend/cmd/server, we need to go up 2 levels to reach project root
 	projectRoot, err := getProjectRoot()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine project root: %w", err)
@@ -55,32 +55,28 @@ func NewRecoveryLogger(logger *zap.SugaredLogger, logFilePath string) (*Recovery
 
 // getProjectRoot determines the project root directory
 func getProjectRoot() (string, error) {
-	// Get the current working directory
 	wd, err := os.Getwd()
 	if err != nil {
 		return "", err
 	}
 
-	// Check if we're running from backend directory (look for go.mod in parent)
+	// Check if we're running from backend directory
 	if filepath.Base(wd) == "backend" {
-		// We're in the backend directory, go up one level
 		return filepath.Dir(wd), nil
 	}
 
 	// Check if we're running from backend/cmd/server
 	if strings.Contains(wd, filepath.Join("backend", "cmd")) {
-		// Find the backend directory and go up one level from there
 		parts := strings.Split(wd, string(filepath.Separator))
 		for i, part := range parts {
 			if part == "backend" && i > 0 {
-				// Reconstruct path up to the parent of backend
 				rootParts := parts[:i]
 				return filepath.Join(rootParts...), nil
 			}
 		}
 	}
 
-	// If we can't determine from path, look for go.mod file
+	// Look for go.mod file
 	dir := wd
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
@@ -93,7 +89,6 @@ func getProjectRoot() (string, error) {
 		dir = parent
 	}
 
-	// Default to current working directory if all else fails
 	return wd, nil
 }
 
@@ -120,86 +115,18 @@ func (r *RecoveryLogger) writeToFile(logType, method, path, ip, userAgent, error
 
 // Recovery returns a gin middleware that recovers from panics and logs them to file
 func Recovery(logger *zap.SugaredLogger) gin.HandlerFunc {
-	// Create recovery logger with file output in root logs directory
+	// Create recovery logger
 	recoveryLogger, err := NewRecoveryLogger(logger, "logs/recovery.log")
 	if err != nil {
 		logger.Fatalf("Failed to create recovery logger: %v", err)
 	}
 
-	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
-		// Check for a broken connection, as it is not really a condition that warrants a panic stack trace.
-		var brokenPipe bool
-		if ne, ok := recovered.(*net.OpError); ok {
-			if se, ok := ne.Err.(*os.SyscallError); ok {
-				if strings.Contains(strings.ToLower(se.Error()), "broken pipe") ||
-					strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
-					brokenPipe = true
-				}
-			}
-		}
+	// Create a discard writer to prevent any output to stdout/stderr
+	discardWriter := io.Discard
 
-		httpRequest, _ := httputil.DumpRequest(c.Request, false)
-		errorString := fmt.Sprintf("%v", recovered)
-		stackTrace := string(debug.Stack())
-
-		// Get user ID if available
-		var userID string
-		if uid, exists := c.Get("user_id"); exists {
-			userID = fmt.Sprintf("%v", uid)
-		}
-
-		if brokenPipe {
-			// Log broken pipe to file only (no CLI output)
-			recoveryLogger.writeToFile("BROKEN_PIPE", c.Request.Method, c.Request.URL.Path,
-				c.ClientIP(), c.Request.UserAgent(), errorString, "Connection broken")
-
-			// Log structured info to app.log only (no CLI output)
-			recoveryLogger.logger.Errorw("Broken pipe error",
-				"url", c.Request.URL.Path,
-				"error", recovered,
-				"method", c.Request.Method,
-				"ip", c.ClientIP(),
-				"user_agent", c.Request.UserAgent(),
-				"user_id", userID,
-				"timestamp", time.Now().UTC(),
-			)
-
-			// Don't output to CLI - just abort
-			c.Abort()
-			return
-		}
-
-		// Log full recovery info to file only (no CLI output)
-		recoveryLogger.writeToFile("PANIC", c.Request.Method, c.Request.URL.Path,
-			c.ClientIP(), c.Request.UserAgent(), errorString, stackTrace)
-
-		// Log structured recovery info to app.log only (no CLI output)
-		recoveryLogger.logger.Errorw("Recovery from panic",
-			"url", c.Request.URL.Path,
-			"error", recovered,
-			"method", c.Request.Method,
-			"ip", c.ClientIP(),
-			"user_agent", c.Request.UserAgent(),
-			"user_id", userID,
-			"path", c.Request.URL.Path,
-			"timestamp", time.Now().UTC(),
-			"stack_trace", stackTrace,
-			"request_dump", string(httpRequest),
-		)
-
-		// Return clean error response (no stack trace to client)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Internal server error",
-			"message": "Something went wrong",
-		})
-		c.Abort()
-	})
-}
-
-// RecoveryWithCustomLogger allows passing a custom recovery logger
-func RecoveryWithCustomLogger(recoveryLogger *RecoveryLogger) gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
-		// Check for a broken connection
+	// Use CustomRecoveryWithWriter with discard writer to prevent CLI output
+	return gin.CustomRecoveryWithWriter(discardWriter, func(c *gin.Context, recovered interface{}) {
+		// Check for broken connection
 		var brokenPipe bool
 		if ne, ok := recovered.(*net.OpError); ok {
 			if se, ok := ne.Err.(*os.SyscallError); ok {
@@ -225,7 +152,7 @@ func RecoveryWithCustomLogger(recoveryLogger *RecoveryLogger) gin.HandlerFunc {
 			recoveryLogger.writeToFile("BROKEN_PIPE", c.Request.Method, c.Request.URL.Path,
 				c.ClientIP(), c.Request.UserAgent(), errorString, "Connection broken")
 
-			// Log structured info
+			// Log structured info to app.log only
 			recoveryLogger.logger.Errorw("Broken pipe error",
 				"url", c.Request.URL.Path,
 				"error", recovered,
@@ -236,6 +163,7 @@ func RecoveryWithCustomLogger(recoveryLogger *RecoveryLogger) gin.HandlerFunc {
 				"timestamp", time.Now().UTC(),
 			)
 
+			// Just abort, don't write status (connection is broken)
 			c.Abort()
 			return
 		}
@@ -244,7 +172,7 @@ func RecoveryWithCustomLogger(recoveryLogger *RecoveryLogger) gin.HandlerFunc {
 		recoveryLogger.writeToFile("PANIC", c.Request.Method, c.Request.URL.Path,
 			c.ClientIP(), c.Request.UserAgent(), errorString, stackTrace)
 
-		// Log structured recovery info
+		// Log structured recovery info to app.log only
 		recoveryLogger.logger.Errorw("Recovery from panic",
 			"url", c.Request.URL.Path,
 			"error", recovered,
@@ -258,10 +186,93 @@ func RecoveryWithCustomLogger(recoveryLogger *RecoveryLogger) gin.HandlerFunc {
 			"request_dump", string(httpRequest),
 		)
 
+		// Return clean error response
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Internal server error",
+			"error":   "internal_server_error",
 			"message": "Something went wrong",
 		})
 		c.Abort()
 	})
+}
+
+// SilentRecovery returns a completely silent recovery middleware
+func SilentRecovery(logger *zap.SugaredLogger) gin.HandlerFunc {
+	// Create recovery logger
+	recoveryLogger, err := NewRecoveryLogger(logger, "logs/recovery.log")
+	if err != nil {
+		logger.Fatalf("Failed to create recovery logger: %v", err)
+	}
+
+	return func(c *gin.Context) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				// Check for broken connection
+				var brokenPipe bool
+				if ne, ok := recovered.(*net.OpError); ok {
+					if se, ok := ne.Err.(*os.SyscallError); ok {
+						if strings.Contains(strings.ToLower(se.Error()), "broken pipe") ||
+							strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
+							brokenPipe = true
+						}
+					}
+				}
+
+				httpRequest, _ := httputil.DumpRequest(c.Request, false)
+				errorString := fmt.Sprintf("%v", recovered)
+				stackTrace := string(debug.Stack())
+
+				// Get user ID if available
+				var userID string
+				if uid, exists := c.Get("user_id"); exists {
+					userID = fmt.Sprintf("%v", uid)
+				}
+
+				if brokenPipe {
+					// Log broken pipe to file only
+					recoveryLogger.writeToFile("BROKEN_PIPE", c.Request.Method, c.Request.URL.Path,
+						c.ClientIP(), c.Request.UserAgent(), errorString, "Connection broken")
+
+					// Log structured info
+					recoveryLogger.logger.Errorw("Broken pipe error",
+						"url", c.Request.URL.Path,
+						"error", recovered,
+						"method", c.Request.Method,
+						"ip", c.ClientIP(),
+						"user_agent", c.Request.UserAgent(),
+						"user_id", userID,
+						"timestamp", time.Now().UTC(),
+					)
+
+					c.Abort()
+					return
+				}
+
+				// Log full recovery info to file only
+				recoveryLogger.writeToFile("PANIC", c.Request.Method, c.Request.URL.Path,
+					c.ClientIP(), c.Request.UserAgent(), errorString, stackTrace)
+
+				// Log structured recovery info
+				recoveryLogger.logger.Errorw("Recovery from panic",
+					"url", c.Request.URL.Path,
+					"error", recovered,
+					"method", c.Request.Method,
+					"ip", c.ClientIP(),
+					"user_agent", c.Request.UserAgent(),
+					"user_id", userID,
+					"path", c.Request.URL.Path,
+					"timestamp", time.Now().UTC(),
+					"stack_trace", stackTrace,
+					"request_dump", string(httpRequest),
+				)
+
+				// Return clean error response
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error":   "internal_server_error",
+					"message": "Something went wrong",
+				})
+				c.Abort()
+			}
+		}()
+		c.Next()
+	}
 }
