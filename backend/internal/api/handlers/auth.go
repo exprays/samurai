@@ -32,12 +32,17 @@ func NewAuthHandler(db *database.Database, authManager *auth.AuthManager, logger
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req auth.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Errorf("JSON binding error: %v", err)
 		c.JSON(http.StatusBadRequest, auth.ErrorResponse{
 			Error:   "Invalid request data",
 			Message: err.Error(),
 		})
 		return
 	}
+
+	// Debug
+	h.logger.Debugf("Registration request: email=%s, username=%s, first_name=%s, last_name=%s",
+		req.Email, req.Username, req.FirstName, req.LastName)
 
 	response, err := h.authService.Register(&req)
 	if err != nil {

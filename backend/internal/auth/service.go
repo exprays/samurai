@@ -66,6 +66,8 @@ func (s *AuthService) Register(req *RegisterRequest) (*AuthResponse, error) {
 		return nil, err
 	}
 
+	logger.Debugf("Password hashed successfully, length: %d", len(hashedPassword))
+
 	// Get default role ID
 	defaultRoleID, err := rbac.GetDefaultRoleID()
 	if err != nil {
