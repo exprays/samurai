@@ -20,7 +20,7 @@ func SetupRouter(db *database.Database, authManager *auth.AuthManager, logger *z
 	middleware.InitRateLimiter(logger)
 
 	// Global middleware (order matters!)
-	router.Use(middleware.Recovery(logger))               // Panic recovery
+	router.Use(middleware.Recovery(logger))               // Panic recovery ( must be first to catch all panics )
 	router.Use(middleware.SecurityMonitoring(logger))     // Security monitoring
 	router.Use(middleware.HeaderValidation())             // Security headers
 	router.Use(middleware.RequestValidator(logger))       // Request validation
@@ -46,6 +46,10 @@ func SetupRouter(db *database.Database, authManager *auth.AuthManager, logger *z
 		health.GET("/ready", healthHandler.Ready)
 		health.GET("/live", healthHandler.Health) // Kubernetes liveness probe
 	}
+
+	router.GET("/test-panic", func(c *gin.Context) {
+		panic("This is a test panic for logging")
+	})
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
